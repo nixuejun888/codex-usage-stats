@@ -1,0 +1,20 @@
+{
+  "name": "codex-usage-stats",
+  "interface": {
+    "displayName": "Codex 用量挂件"
+  },
+  "plugins": [
+    {
+      "name": "codex-usage-stats",
+      "source": {
+        "source": "local",
+        "path": "."
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

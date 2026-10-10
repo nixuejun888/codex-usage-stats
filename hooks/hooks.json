@@ -1,0 +1,19 @@
+{
+  "description": "Docks the Codex usage panel into the bottom-right corner of the Codex client window at session start. The check is idempotent and runs in the background, so it never blocks a session and never stacks a second panel. Compaction is deliberately not matched: quitting the panel mid-session should stick until the next session starts.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pythonw \"${PLUGIN_ROOT}/hooks/ensure_widget.py\"",
+            "commandWindows": "pythonw \"${PLUGIN_ROOT}\\hooks\\ensure_widget.py\"",
+            "async": true,
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

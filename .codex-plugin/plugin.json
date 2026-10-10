@@ -1,0 +1,44 @@
+{
+  "name": "codex-usage-stats",
+  "version": "1.2.1",
+  "description": "Local Codex token usage: reports from the rollout logs plus a locked live usage panel docked inside the Codex client window, priced in yuan.",
+  "author": {
+    "name": "本地插件"
+  },
+  "license": "MIT",
+  "keywords": [
+    "usage",
+    "tokens",
+    "cache-hit",
+    "widget",
+    "overlay",
+    "desktop"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Codex 用量挂件",
+    "shortDescription": "实时读数、¥ 费用估算 + 用量报告，挂件锁定不可误关",
+    "longDescription": "从本机 Codex rollout 日志读取 token 用量，不联网、只读日志。附带一个贴在客户端右下角的小挂件：显示今日总量与费用（人民币）、缓存命中率与进度条、新输入/缓存读/输出三段拆分、当前会话（token 与费用）、当日最重的会话，以及近 7 天柱状图。费用按 DeepSeek 官方人民币价目（元/每 1M token）估算：缓存命中、缓存未命中、输出分别计价，且每条 response 按自己的时间戳区分高峰/空闲（空闲价为高峰一半，周末与节假日全天空闲）；需要美元价目加 --usd。挂件是客户端窗口的 owned window，随客户端置顶与最小化，位置始终被夹在客户端内容区内，拖不出应用窗口；并且是锁定的——没有关闭按钮，右键菜单没有退出项，Alt+F4 也会被忽略，需要停用时执行 hooks/ensure_widget.py --stop。数字由增量 tail 每秒刷新，每 60 秒全量重算一次兜底。另有命令行报告：按天/线程/模型/session/单次来回汇总，可带费用列或 --no-price 关闭。SessionStart 钩子在会话开始时自动拉起挂件，幂等且后台执行，不会阻塞会话，也不会叠出第二个面板。",
+    "developerName": "本地插件",
+    "category": "Productivity",
+    "capabilities": [
+      "Skills",
+      "Hooks"
+    ],
+    "defaultPrompt": [
+      "看下我今天用了多少 token、多少钱，缓存命中率多少？",
+      "这次对话花了多少人民币？",
+      "把用量挂件贴回客户端右下角",
+      "把用量挂件停掉（需要时再开）"
+    ],
+    "brandColor": "#4CC2A0",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png",
+    "screenshots": [
+      "./assets/banner.png",
+      "./assets/widget-docked.png",
+      "./assets/widget-live.png"
+    ]
+  }
+}

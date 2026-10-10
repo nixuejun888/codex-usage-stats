@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Usage Stats"
+  short_description: "Report local Codex token usage"
+  default_prompt: "Show my Codex token usage for the last 7 days, broken down by thread and model."
