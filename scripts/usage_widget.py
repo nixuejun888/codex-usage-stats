@@ -5,9 +5,13 @@ Shows today's tokens, the cache-hit rate, the live session and a 7-day chart.
 The panel is owned by the Codex window, so it rides above it and hides with it,
 and every position is clamped inside the client rect — it cannot be dragged out
 of the app window. Money is in CNY from DeepSeek's own yuan price list (`--usd`
-switches to the dollar list). The panel is deliberately locked: there is no
-close button and WM_CLOSE is refused, so `hooks/ensure_widget.py --stop` is the
-only way to shut it down. Numbers refresh from an append-only tail of the newest
+switches to the dollar list). The panel has an in-panel power button: `● 停用`
+collapses it to a one-line strip that says it is off, and clicking that strip
+brings the full panel back. Nothing about "off" is written to disk, so the
+SessionStart hook always brings the panel back — closing the client never leaves
+it missing. There is still no close button and WM_CLOSE is refused, so an
+accidental ✕ or Alt+F4 cannot dismiss it; `hooks/ensure_widget.py --stop` quits
+the process outright. Numbers refresh from an append-only tail of the newest
 rollout log (~1s), re-based by a full scan every `--rescan` seconds.
 Standard library only; read-only on the logs.
 """
@@ -44,6 +48,12 @@ BAR_EMPTY = "#26303c"
 BAR_TODAY = ACCENT
 TRACK = "#232c38"
 RAW = 14  # vertical room reserved for the "近 7 天" caption inside the canvas
+
+# The two faces of the in-panel power switch. Both dots are geometric shapes that
+# Segoe UI actually carries (U+25CF / U+25CB); the power symbol U+23FB renders as
+# an empty box on this machine, so it is not used.
+POWER_ON_TEXT = "● 停用"
+POWER_OFF_TEXT = "○  已停用 · 单击启用"
 
 GWL_HWNDPARENT = -8
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
@@ -439,6 +449,7 @@ class UsageWidget:
         self.drag_origin: tuple[int, int] | None = None
         self.headless = bool(getattr(options, "watch", 0))
         self.ticks = 0
+        self.enabled = True  # the 停用 button flips this; "off" is never persisted
 
         self.today = zero_usage()
         self.today_cost = 0.0
@@ -484,14 +495,23 @@ class UsageWidget:
     def _build(self) -> None:
         pad = tk.Frame(self.root, bg=BG, padx=12, pady=9)
         pad.pack(fill="both", expand=True)
+        self.pad = pad
 
         header = tk.Frame(pad, bg=BG)
         header.pack(fill="x")
         tk.Label(header, text="CODEX 用量", bg=BG, fg=FG_DIM,
                  font=("Segoe UI", 8, "bold")).pack(side="left")
-        lock = tk.Label(header, text="🔒 已锁定" if self.locked else "",
-                        bg=BG, fg=FG_DIM, font=("Segoe UI", 7))
-        lock.pack(side="right")
+        # The in-panel start/stop control. Left click toggles; it never closes the
+        # window, so the lock (no ✕, WM_CLOSE refused) stays intact. The dot is
+        # U+25CF/U+25CB: Segoe UI carries those, so they never render as tofu (the
+        # power symbol U+23FB does, on this machine).
+        self.power = tk.Label(header, text=POWER_ON_TEXT, bg=BG, fg=FG_DIM,
+                              font=("Segoe UI", 7), cursor="hand2")
+        self.power.pack(side="right")
+        self.power.bind("<Button-1>", self._toggle_click)
+        self.power.bind("<Button-3>", self._menu)
+        self.power.bind("<Enter>", lambda _e: self._hover(self.power, ACCENT))
+        self.power.bind("<Leave>", lambda _e: self._hover(self.power, FG_DIM))
         self.dock_state = tk.Label(header, text="", bg=BG, fg=FG_DIM, font=("Segoe UI", 7))
         self.dock_state.pack(side="right", padx=(0, 6))
 
@@ -531,6 +551,19 @@ class UsageWidget:
                                font=("Segoe UI", 7), anchor="w")
         self.footer.pack(fill="x")
 
+        # The "off" face of the panel: a one-line strip that replaces the whole
+        # readout. Clicking it turns the panel back on, so 停用 is never a dead end.
+        self.off_pad = tk.Frame(self.root, bg=BG, padx=10, pady=6)
+        self.off_label = tk.Label(self.off_pad, text=POWER_OFF_TEXT, bg=BG,
+                                  fg=FG_DIM, font=("Segoe UI", 8), anchor="w",
+                                  cursor="hand2")
+        self.off_label.pack(fill="x")
+        for widget in (self.off_pad, self.off_label):
+            widget.bind("<Button-1>", self._toggle_click)
+            widget.bind("<Button-3>", self._menu)
+        self.off_label.bind("<Enter>", lambda _e: self._hover(self.off_label, ACCENT))
+        self.off_label.bind("<Leave>", lambda _e: self._hover(self.off_label, FG_DIM))
+
         for widget in (pad, header, total_row, self.total, self.total_cost,
                        self.split, self.session,
                        self.top_thread, self.spark, self.footer, self.hit, hit_row):
@@ -541,23 +574,81 @@ class UsageWidget:
             widget.bind("<Double-Button-1>", lambda _event: self.refresh_scan())
 
         self.menu = tk.Menu(self.root, tearoff=0)
+        self._rebuild_menu()
+
+    # ------------------------------------------------------------ power switch
+    def _hover(self, widget: tk.Label, colour: str) -> None:
+        if widget.winfo_exists():
+            widget.configure(fg=colour)
+
+    def _toggle_click(self, _event=None) -> str:
+        """Left click on 停用 (or on the off strip): flip the panel on/off."""
+        self._set_enabled(not self.enabled)
+        return "break"
+
+    def _set_enabled(self, enabled: bool) -> None:
+        """停用 = shrink to the off strip; 启用 = bring the full readout back.
+
+        Nothing is written down, so this only lasts for the lifetime of the
+        process: the next client launch starts the panel enabled again.
+        """
+        enabled = bool(enabled)
+        if enabled == self.enabled:
+            return
+        self.enabled = enabled
+        if enabled:
+            self.off_pad.pack_forget()
+            self.pad.pack(fill="both", expand=True)
+            self.power.configure(text=POWER_ON_TEXT)
+            # Keep this line short: a long footer text would widen the panel
+            # (the 7-day canvas is what normally sets its width).
+            self.footer.configure(text="已启用 · 停用键在标题栏")
+        else:
+            self.pad.pack_forget()
+            self.off_pad.pack(fill="both", expand=True)
+            self.power.configure(text=POWER_ON_TEXT)
+        self._resize_to_content()
+        self._rebuild_menu()
+
+    def _resize_to_content(self) -> None:
+        """Re-measure after a face swap, then keep the panel inside the client."""
+        self.root.update_idletasks()
+        self.width = max(self.root.winfo_reqwidth(), 60)
+        self.height = max(self.root.winfo_reqheight(), 20)
+        self.root.geometry(f"{self.width}x{self.height}")
+        self._apply_position()
+
+    def _rebuild_menu(self) -> None:
+        show = self.enabled
+        self.menu.delete(0, "end")
         self.menu.add_command(label="立即重算", command=self.refresh_scan)
         self.menu.add_command(label="贴回客户端右下角", command=self._redock)
         self.menu.add_command(label="置顶开关", command=self._toggle_topmost)
         self.menu.add_command(label="价目说明", command=self._show_pricing)
         self.menu.add_separator()
-        if self.locked:
-            self.menu.add_command(label="已锁定：不可关闭", state="disabled")
+        if show:
+            self.menu.add_command(label="停用挂件（收成小条）",
+                                  command=lambda: self._set_enabled(False))
         else:
-            self.menu.add_command(label="退出挂件", command=self.root.destroy)
+            self.menu.add_command(label="启用挂件",
+                                  command=lambda: self._set_enabled(True))
+        self.menu.add_command(label="退出挂件（下次开客户端自动回来）", command=self._quit)
+        self.menu.add_separator()
+        if self.locked:
+            self.menu.add_command(label="已锁定：✕ 与 Alt+F4 无效", state="disabled")
+
+    def _quit(self) -> None:
+        """Leave for now; the SessionStart hook docks the panel again next launch."""
+        self.root.destroy()
 
     def _refuse_close(self) -> None:
         """Swallow a close request; the panel is meant to stay docked.
 
         Leaving a visible trace matters here: a silently ignored Alt+F4 looks
-        like a broken window rather than a deliberate lock.
+        like a broken window rather than a deliberate lock. The panel has its own
+        power switch and a menu entry, so the message points at them instead.
         """
-        self.footer.configure(text="已锁定，不可关闭")
+        self.footer.configure(text="已锁定：✕ 无效，请用「停用」或右键菜单退出")
         self.root.after(6000, self._render_numbers)
 
     def _show_pricing(self) -> None:
@@ -885,7 +976,9 @@ class UsageWidget:
             time.sleep(0.1)
         self._follow_once()
         child = window_rect(self.hwnd)
-        parent = self.client_rect
+        # A minimised or closed client is not an error: fall back to the desktop
+        # work area so the geometry checks still mean something.
+        parent = self.client_rect or work_area(self.root)
         inside = bool(child and parent and child[0] >= parent[0] and child[1] >= parent[1]
                       and child[2] <= parent[2] and child[3] <= parent[3])
         hit = (self.today["cached_input_tokens"] / self.today["input_tokens"]
@@ -912,12 +1005,30 @@ class UsageWidget:
         self.root.update()  # let Tk apply the geometry before reading it back
         redocked = window_rect(self.hwnd)
 
+        # the in-panel power switch: 停用 shrinks the panel, 启用 restores it, and
+        # both faces stay inside the client window
+        full_box = window_rect(self.hwnd)
+        self._set_enabled(False)
+        self._follow_once()
+        off_box = window_rect(self.hwnd)
+        self._set_enabled(True)
+        self._follow_once()
+        back_box = window_rect(self.hwnd)
+
         print(f"client hwnd={self.client} rect={parent}")
         print(f"widget rect={child} inside_client={inside}")
         print(f"gap right={parent[2] - child[2] if child and parent else None}, "
               f"bottom={parent[3] - child[3] if child and parent else None}")
         print(f"drag clamp inside_client={escapes} all_inside={all(escapes)}")
         print(f"redock rect={redocked} margin={self.options.margin}")
+        print(f"power toggle full={full_box}")
+        print(f"             off={off_box} inside={bool(off_box and parent and off_box[0] >= parent[0] and off_box[1] >= parent[1] and off_box[2] <= parent[2] and off_box[3] <= parent[3])}")
+        print(f"           back={back_box} inside={bool(back_box and parent and back_box[0] >= parent[0] and back_box[1] >= parent[1] and back_box[2] <= parent[2] and back_box[3] <= parent[3])}")
+        print(f"           enabled={self.enabled} off_smaller={bool(off_box and full_box and (off_box[2] - off_box[0]) < (full_box[2] - full_box[0]))}")
+        print(f"power button at ({self.power.winfo_rootx()},{self.power.winfo_rooty()}) "
+              f"size={self.power.winfo_width()}x{self.power.winfo_height()}")
+        if not self.client:
+            print("note: no client window found (minimised?) — clamped against the work area")
         print(f"today total={self.today['total_tokens']} hit={hit * 100:.2f}% "
               f"session={self.session_total} files={self.files}")
         print(f"today cost={self.today_cost:.6f} {self.currency} "

@@ -15,7 +15,7 @@
 - **近 7 天柱状图**，双击挂件立即重算。
 - **实时刷新**：增量 tail 每秒读一次正在增长的日志，每 60 秒全量重算兜底。
 - **贴在客户端里**：挂件是客户端窗口的 owned window，随客户端置顶、最小化隐藏，位置始终被夹在客户端内容区，拖不出应用窗口。
-- **锁定不可误关**：没有关闭按钮，右键菜单没有退出项，Alt+F4 也无效；停用只走 `--stop` 一条路。
+- **内部启停按钮**：标题栏的 `● 停用` 一键收起成小条，再点小条展开；右键菜单里同样有停用 / 启用 / 退出，停用状态不写盘，**每次打开客户端都会自动重新贴回**。防误关照旧：没有 ✕，Alt+F4 也会被忽略。
 - **命令行报告**：按天 / 线程 / 模型 / 文件 / 单次来回汇总，可出 JSON，可带或不带费用。
 
 ## 环境要求
@@ -49,15 +49,25 @@ codex plugin add codex-usage-stats@codex-usage-stats
 
 ## 挂件怎么开、怎么关
 
+挂件内部就有启停开关：标题栏右侧的 `● 停用`。点一下，整个挂件收成一行 `○ 已停用 · 单击启用` 的小条，位置仍在同一个角；点小条就展开回来。右键菜单里有同一对开关（`停用挂件（收成小条）` / `启用挂件`），再加一条 `退出挂件（下次开客户端自动回来）`。
+
+![挂件内部的启停按钮](assets/widget-toggle.png)
+
+停用后整个挂件收成一行小条，位置不变，点它即恢复：
+
+![已停用小条](assets/widget-off-strip.png)
+
 ```powershell
 pythonw hooks\ensure_widget.py          # 拉起挂件（幂等，不会叠出第二个）
 pythonw hooks\ensure_widget.py --status # running / idle
-pythonw hooks\ensure_widget.py --stop   # 唯一的关闭方式
+pythonw hooks\ensure_widget.py --stop   # 与菜单里的「退出挂件」等效
 ```
 
-双击插件根目录的 `start-widget.cmd` 效果相同。想随 Windows 开机自启，把它的快捷方式丢进 `shell:startup`。
+双击插件根目录的 `start-widget.cmd` 与第一条等价。
 
-挂件是**故意锁死**的：点不到 ✕、菜单里没有退出、`WM_DELETE_WINDOW`（含 Alt+F4）会被拒绝并在脚注闪一行 `挂件已锁定，不会被关闭`。真要关，只能走上面的 `--stop`。调试挂件本身时可以用 `--allow-close` 恢复原有的可关闭行为。
+**每次打开客户端都会自动贴回来**：插件的 SessionStart 钩子在每次会话开始（含恢复会话）时拉起挂件，而「停用 / 退出」都不写盘，所以上次怎么关都不影响下一次启动。想让它在 Windows 登录时就起来（而不是等客户端启动），把 `start-widget.cmd` 的快捷方式丢进 `shell:startup`。
+
+防误关仍然在：没有 ✕，`WM_DELETE_WINDOW`（含 Alt+F4）被拒绝，并会在脚注闪一行 `已锁定：✕ 无效，请用「停用」或右键菜单退出`。调试挂件本身时可以用 `--allow-close` 恢复可关闭行为。
 
 挂件支持的开关：`--client-exe`（贴住哪个进程，默认 `ChatGPT.exe`，其次 `Codex.exe`）、`--margin`（贴角留白，默认 14px）、`--opacity`、`--follow-ms`、`--no-topmost`、`--live`、`--rescan`、`--stay-visible`、`--codex-home`、`--no-price`、`--usd`（改按美元价目）、`--selftest`（打印几何并做越界拖动自检）、`--watch N`（无界面跑 N 秒并打印读数）。
 
@@ -142,8 +152,10 @@ start-widget.cmd                   双击启动
 ## English
 
 A Codex plugin that reads this machine's rollout logs (read-only, offline) and
-prints token-usage reports, plus a **locked, yuan-priced live panel** docked into
-the bottom-right corner of the Codex client window. Cost is estimated from
+prints token-usage reports, plus a **yuan-priced live panel** with an in-panel
+on/off switch, docked into the bottom-right corner of the Codex client
+window. The panel is re-docked automatically on every client launch, while still
+refusing accidental closes (no ✕, Alt+F4 ignored). Cost is estimated from
 DeepSeek's official CNY list prices (¥/1M tokens: cache hit / miss / output),
 priced per response at peak or off-peak (off-peak is exactly half, peak is
 09:00–12:00 and 14:00–18:00 Beijing time on weekdays). `--usd` switches to the

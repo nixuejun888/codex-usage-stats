@@ -1,7 +1,7 @@
 {
   "name": "codex-usage-stats",
-  "version": "1.2.1",
-  "description": "Local Codex token usage: reports from the rollout logs plus a locked live usage panel docked inside the Codex client window, priced in yuan.",
+  "version": "1.3.0",
+  "description": "Local Codex token usage: reports from the rollout logs plus a live usage panel docked inside the Codex client window, with an in-panel on/off switch and yuan pricing.",
   "author": {
     "name": "本地插件"
   },
@@ -18,8 +18,8 @@
   "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "Codex 用量挂件",
-    "shortDescription": "实时读数、¥ 费用估算 + 用量报告，挂件锁定不可误关",
-    "longDescription": "从本机 Codex rollout 日志读取 token 用量，不联网、只读日志。附带一个贴在客户端右下角的小挂件：显示今日总量与费用（人民币）、缓存命中率与进度条、新输入/缓存读/输出三段拆分、当前会话（token 与费用）、当日最重的会话，以及近 7 天柱状图。费用按 DeepSeek 官方人民币价目（元/每 1M token）估算：缓存命中、缓存未命中、输出分别计价，且每条 response 按自己的时间戳区分高峰/空闲（空闲价为高峰一半，周末与节假日全天空闲）；需要美元价目加 --usd。挂件是客户端窗口的 owned window，随客户端置顶与最小化，位置始终被夹在客户端内容区内，拖不出应用窗口；并且是锁定的——没有关闭按钮，右键菜单没有退出项，Alt+F4 也会被忽略，需要停用时执行 hooks/ensure_widget.py --stop。数字由增量 tail 每秒刷新，每 60 秒全量重算一次兜底。另有命令行报告：按天/线程/模型/session/单次来回汇总，可带费用列或 --no-price 关闭。SessionStart 钩子在会话开始时自动拉起挂件，幂等且后台执行，不会阻塞会话，也不会叠出第二个面板。",
+    "shortDescription": "实时读数、¥ 费用估算 + 用量报告，挂件内部一键启停",
+    "longDescription": "从本机 Codex rollout 日志读取 token 用量，不联网、只读日志。附带一个贴在客户端右下角的小挂件：显示今日总量与费用（人民币）、缓存命中率与进度条、新输入/缓存读/输出三段拆分、当前会话（token 与费用）、当日最重的会话，以及近 7 天柱状图。费用按 DeepSeek 官方人民币价目（元/每 1M token）估算：缓存命中、缓存未命中、输出分别计价，且每条 response 按自己的时间戳区分高峰/空闲（空闲价为高峰一半，周末与节假日全天空闲）；需要美元价目加 --usd。挂件是客户端窗口的 owned window，随客户端置顶与最小化，位置始终被夹在客户端内容区内，拖不出应用窗口。标题栏右侧有「● 停用」启停按钮：点一下收成一行「○ 已停用 · 单击启用」小条，再点小条展开；停用状态不写盘，所以每次打开客户端都会自动重新贴回右下角。挂件仍然没有关闭按钮，Alt+F4 也会被忽略，避免误关；要彻底退出用右键菜单的「退出挂件（下次开客户端自动回来）」或 hooks/ensure_widget.py --stop。数字由增量 tail 每秒刷新，每 60 秒全量重算一次兜底。另有命令行报告：按天/线程/模型/session/单次来回汇总，可带费用列或 --no-price 关闭。SessionStart 钩子在会话开始时自动拉起挂件，幂等且后台执行，不会阻塞会话，也不会叠出第二个面板。",
     "developerName": "本地插件",
     "category": "Productivity",
     "capabilities": [
@@ -30,13 +30,14 @@
       "看下我今天用了多少 token、多少钱，缓存命中率多少？",
       "这次对话花了多少人民币？",
       "把用量挂件贴回客户端右下角",
-      "把用量挂件停掉（需要时再开）"
+      "把用量挂件停用/重新启用（挂件里点「● 停用」也行）"
     ],
     "brandColor": "#4CC2A0",
     "composerIcon": "./assets/icon.png",
     "logo": "./assets/logo.png",
     "screenshots": [
       "./assets/banner.png",
+      "./assets/widget-toggle.png",
       "./assets/widget-docked.png",
       "./assets/widget-live.png"
     ]

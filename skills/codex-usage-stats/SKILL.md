@@ -11,17 +11,24 @@ levels up: `<plugin>/scripts/codex_usage.py` and `<plugin>/scripts/usage_widget.
 The plugin root is the folder holding `.codex-plugin/plugin.json` — for this
 machine `C:\Users\Administrator\plugins\codex-usage-stats`.
 
-Getting the panel on screen: the plugin's SessionStart hook brings it up on the
-next session, and anything can start it by hand — `start-widget.cmd` in the
-plugin root (double-click), `pythonw hooks/ensure_widget.py`, or
-`pythonw hooks/ensure_widget.py --status` to check whether it is already up.
-Every path is idempotent: a second panel is refused, never stacked.
+Getting the panel on screen: the plugin's SessionStart hook brings it up on
+every client launch (and on resume/clear), and anything can start it by hand —
+`start-widget.cmd` in the plugin root (double-click),
+`pythonw hooks/ensure_widget.py`, or `pythonw hooks/ensure_widget.py --status`
+to check whether it is already up. Every path is idempotent: a second panel is
+refused, never stacked.
 
-Taking it off screen is deliberate, not a click: the panel is **locked**, so
-there is no close button, the menu has no quit entry, and Alt+F4/WM_CLOSE is
-refused. Use `pythonw hooks/ensure_widget.py --stop` (it signals the panel's
-named stop event; the panel exits on its next tick). Only mention `--allow-close`
-if you are debugging the panel itself.
+Turning it off and on: the panel carries its own power switch — the `● 停用`
+label at the top right of the header. Clicking it collapses the panel into a
+one-line `○ 已停用 · 单击启用` strip in the same corner, and clicking that strip
+brings the full readout back. The menu holds the same pair (停用挂件（收成小条）/
+启用挂件) plus 退出挂件（下次开客户端自动回来）, which ends the process outright.
+Nothing about "off" is written to disk, so the hook always docks the panel back
+at the next client launch: pausing or quitting never leaves it missing. The
+panel still cannot be dismissed by accident — no ✕ exists and WM_CLOSE (Alt+F4)
+is refused. From a shell, `pythonw hooks/ensure_widget.py --stop` is the same
+exit as the menu item. Only mention `--allow-close` if you are debugging the
+panel itself.
 
 Answer usage questions from the local rollout logs, which record every model
 response. Run the bundled script; do not read raw logs into context (single
@@ -70,21 +77,27 @@ line.
   `--live` seconds (default 1.0) and adds only records it has not counted; a
   full rescan every `--rescan` seconds (default 60) re-bases it. The headline
   figure moves while a conversation is running, not only after a rescan.
-- **Locked on purpose.** No ✕ in the header, no quit entry in the menu, and
-  `WM_DELETE_WINDOW` is refused (Alt+F4 included) — a close request flashes the
-  footer line `挂件已锁定，不会被关闭` instead. To shut the panel down run
-  `pythonw hooks/ensure_widget.py --stop`; to get it back, run
-  `ensure_widget.py` or wait for the next session. `--allow-close` restores the
-  old closable behaviour and exists only for debugging.
+- **On/off switch inside the panel.** `● 停用` in the header toggles between the full
+  readout and a one-line `已停用` strip; the strip itself is the way back, so
+  pausing is never a dead end. The menu adds 停用挂件（收成小条）/ 启用挂件 and
+  退出挂件（下次开客户端自动回来）. Still no accidental dismissal: there is no ✕
+  and `WM_DELETE_WINDOW` is refused (Alt+F4 included) — a close request flashes
+  `已锁定：✕ 无效，请用「停用」或右键菜单退出`. The off state is not persisted, so
+  every client launch re-docks the panel; `pythonw hooks/ensure_widget.py --stop`
+  quits it from a shell. `--allow-close` restores the old closable behaviour and
+  exists only for debugging.
 - Drag to move, double-click to rescan, right-click for the menu (立即重算 /
-  贴回客户端右下角 / 置顶开关 / 价目说明 / 已锁定：不可关闭).
+  贴回客户端右下角 / 置顶开关 / 价目说明 / 停用挂件或启用挂件 / 退出挂件 /
+  已锁定：✕ 与 Alt+F4 无效).
 - Flags: `--client-exe` (process to dock to; default `ChatGPT.exe`, then
   `Codex.exe`; repeatable), `--margin` (gap inside the corner, 14px),
   `--opacity`, `--follow-ms` (client tracking, 250ms), `--no-topmost`,
   `--live`, `--rescan`, `--stay-visible`, `--codex-home`, `--no-price`
   (hide cost), `--usd` (price in dollars instead of yuan).
-- `--selftest` prints the geometry plus a drag-clamp check; `--watch N` runs
-  headless for N seconds and prints the numbers plus cost whenever they change.
+- `--selftest` prints the geometry, the drag-clamp check, the power-switch check
+  (both faces must stay inside the client rect) and the power button's screen
+  position; `--watch N` runs headless for N seconds and prints the numbers plus
+  cost whenever they change.
 
 This is a desktop overlay owned by the Codex window; the app has no extension
 point for a corner widget, so nothing is injected into it. The hook starts it
